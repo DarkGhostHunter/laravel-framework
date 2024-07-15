@@ -276,6 +276,22 @@ class Filesystem
     }
 
     /**
+     * Creates a file with the given data if it doesn't exist.
+     *
+     * @param  string  $path
+     * @param  string  $data
+     * @param  bool  $lock
+     * @return void
+     */
+    public function ensureFileExists($path, $data, $lock = false, $mode = 0755)
+    {
+        if (! $this->isFile($path)) {
+            $this->ensureDirectoryExists($this->dirname($path), $mode);
+            $this->put($path, $data, $lock);
+        }
+    }
+
+    /**
      * Get or set UNIX mode of a file or directory.
      *
      * @param  string  $path

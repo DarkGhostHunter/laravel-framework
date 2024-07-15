@@ -375,6 +375,16 @@ class FilesystemTest extends TestCase
         $this->assertStringEqualsFile(self::$tempDir.'/file.txt', 'foobar');
     }
 
+    public function testEnsureFileExists()
+    {
+        $files = new Filesystem;
+        $files->ensureFileExists(self::$tempDir.'/file.txt', 'foo');
+        $files->ensureFileExists(self::$tempDir.'/file.txt', 'bar');
+
+        $this->assertFileExists(self::$tempDir.'/file.txt');
+        $this->assertStringEqualsFile(self::$tempDir.'/file.txt', 'foo');
+    }
+
     public function testMoveMovesFiles()
     {
         file_put_contents(self::$tempDir.'/foo.txt', 'foo');
