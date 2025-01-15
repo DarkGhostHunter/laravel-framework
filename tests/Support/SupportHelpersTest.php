@@ -23,6 +23,7 @@ use ReflectionClass;
 use RuntimeException;
 use stdClass;
 use Traversable;
+use function wrap;
 
 class SupportHelpersTest extends TestCase
 {
@@ -1126,6 +1127,13 @@ class SupportHelpersTest extends TestCase
         $this->assertEquals(10, with(5, function ($five) {
             return $five + 5;
         }));
+    }
+
+    public function testWrap()
+    {
+        $this->assertIsCallable(wrap(10));
+        $this->assertEquals(10, wrap(10)());
+        $this->assertEquals(20, wrap(10)(fn ($value) => $value * 2));
     }
 
     public function testAppendConfig()

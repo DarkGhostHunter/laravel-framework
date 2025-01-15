@@ -526,3 +526,19 @@ if (! function_exists('with')) {
         return is_null($callback) ? $value : $callback($value);
     }
 }
+
+if (! function_exists('wrap')) {
+    /**
+     * Wraps a value into a function that returns the value.
+     *
+     * @template TValue
+     * @template TReturn
+     *
+     * @param  TValue  $value
+     * @return \Closure(callable(TValue):TReturn):TValue
+     */
+    function wrap($value)
+    {
+        return fn($unwrap = null) => with($value, $unwrap);
+    }
+}
