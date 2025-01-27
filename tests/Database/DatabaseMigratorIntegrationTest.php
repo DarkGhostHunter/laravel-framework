@@ -255,6 +255,28 @@ class DatabaseMigratorIntegrationTest extends TestCase
         $this->assertEquals($expected, $migrationsFilesFullPaths);
     }
 
+    public function testMigrationsCanRunWithCallbacks()
+    {
+        $this->migrator->run([__DIR__.'/migrations/callbacks/2025_01_26_210000_create_table_foo.php']);
+
+        $this->assertTrue($this->db->schema()->hasTable('bar'));
+
+        $this->migrator->rollback([__DIR__.'/migrations/callbacks/2025_01_26_210000_create_table_foo.php']);
+
+        $this->assertFalse($this->db->schema()->hasTable('users'));
+    }
+
+    public function testMigrationsCanRunWithoutCallbacks()
+    {
+        $this->migrator->run([__DIR__.'/migrations/callbacks/2025_01_26_210000_create_table_bar.php']);
+
+        $this->assertFalse($this->db->schema()->hasTable('bar'));
+
+        $this->migrator->rollback([__DIR__.'/migrations/callbacks/2025_01_26_210000_create_table_bar.php']);
+
+        $this->assertFalse($this->db->schema()->hasTable('users'));
+    }
+
     public function testConnectionPriorToMigrationIsNotChangedAfterMigration()
     {
         $this->migrator->setConnection('default');

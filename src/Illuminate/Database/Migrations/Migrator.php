@@ -470,10 +470,24 @@ class Migrator
     {
         $previousConnection = $this->resolver->getDefaultConnection();
 
+        $runCallbacks = property_exists($migration, 'runCallbacks') && $migration->runCallbacks;
+
         try {
             $this->resolver->setDefaultConnection($connection->getName());
 
+            if ($runCallbacks && property_exists($migration, $property = 'before'.ucfirst($method).'Callbacks')) {
+                foreach ($migration->{$property} as $callback) {
+                    $callback($migration);
+                }
+            }
+
             $migration->{$method}();
+
+            if ($runCallbacks && property_exists($migration, $property = 'after'.ucfirst($method).'Callbacks')) {
+                foreach ($migration->{$property} as $callback) {
+                    $callback($migration);
+                }
+            }
         } finally {
             $this->resolver->setDefaultConnection($previousConnection);
         }
