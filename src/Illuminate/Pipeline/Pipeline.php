@@ -10,6 +10,9 @@ use Illuminate\Support\Traits\Macroable;
 use RuntimeException;
 use Throwable;
 
+/**
+ * @template TPassable
+ */
 class Pipeline implements PipelineContract
 {
     use Conditionable;
@@ -25,14 +28,14 @@ class Pipeline implements PipelineContract
     /**
      * The object being passed through the pipeline.
      *
-     * @var mixed
+     * @var TPassable
      */
     protected $passable;
 
     /**
      * The array of class pipes.
      *
-     * @var array
+     * @var array<callable(TPassable, \Closure(TPassable):TPassable):TPassable>
      */
     protected $pipes = [];
 
@@ -46,7 +49,7 @@ class Pipeline implements PipelineContract
     /**
      * The final callback to be executed after the pipeline ends regardless of the outcome.
      *
-     * @var \Closure|null
+     * @var (\Closure(TPassable):mixed)|null
      */
     protected $finally;
 
@@ -70,7 +73,7 @@ class Pipeline implements PipelineContract
     /**
      * Set the object being sent through the pipeline.
      *
-     * @param  mixed  $passable
+     * @param  TPassable  $passable
      * @return $this
      */
     public function send($passable)
@@ -122,7 +125,7 @@ class Pipeline implements PipelineContract
     /**
      * Run the pipeline with a final destination callback.
      *
-     * @param  \Closure  $destination
+     * @param  (\Closure(TPassable):TPassable|mixed)  $destination
      * @return mixed
      */
     public function then(Closure $destination)
@@ -145,7 +148,7 @@ class Pipeline implements PipelineContract
     /**
      * Run the pipeline and return the result.
      *
-     * @return mixed
+     * @return TPassable
      */
     public function thenReturn()
     {
@@ -157,7 +160,7 @@ class Pipeline implements PipelineContract
     /**
      * Set a final callback to be executed after the pipeline ends regardless of the outcome.
      *
-     * @param  \Closure  $callback
+     * @param  \Closure(TPassable):mixed  $callback
      * @return $this
      */
     public function finally(Closure $callback)
@@ -170,7 +173,7 @@ class Pipeline implements PipelineContract
     /**
      * Get the final piece of the Closure onion.
      *
-     * @param  \Closure  $destination
+     * @param  \Closure(TPassable):mixed  $destination
      * @return \Closure
      */
     protected function prepareDestination(Closure $destination)
@@ -187,7 +190,7 @@ class Pipeline implements PipelineContract
     /**
      * Get a Closure that represents a slice of the application onion.
      *
-     * @return \Closure
+     * @return \Closure(TPassable, \Closure(TPassable):TPassable):mixed
      */
     protected function carry()
     {
@@ -301,8 +304,8 @@ class Pipeline implements PipelineContract
     /**
      * Handle the value returned from each pipe before passing it to the next.
      *
-     * @param  mixed  $carry
-     * @return mixed
+     * @param  TPassable  $carry
+     * @return TPassable
      */
     protected function handleCarry($carry)
     {
@@ -312,7 +315,7 @@ class Pipeline implements PipelineContract
     /**
      * Handle the given exception.
      *
-     * @param  mixed  $passable
+     * @param  TPassable  $passable
      * @param  \Throwable  $e
      * @return mixed
      *
