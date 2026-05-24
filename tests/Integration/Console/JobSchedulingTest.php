@@ -11,7 +11,7 @@ use Orchestra\Testbench\TestCase;
 
 class JobSchedulingTest extends TestCase
 {
-    public function testJobQueuingRespectsJobQueue()
+    public function testJobQueuingRespectsJobQueue(): void
     {
         Queue::fake();
 
@@ -39,7 +39,7 @@ class JobSchedulingTest extends TestCase
         })->isEmpty());
     }
 
-    public function testJobQueuingRespectsJobConnection()
+    public function testJobQueuingRespectsJobConnection(): void
     {
         Queue::fake();
 
@@ -79,6 +79,32 @@ class JobSchedulingTest extends TestCase
         $this->assertSame(1, Queue::pushed(JobWithoutDefaultConnection::class, function (JobWithoutDefaultConnection $job, $pushedQueue) {
             return $job->connection === 'bar';
         })->count());
+    }
+
+    public function testJobQueuingRespectsQueueRoutes(): void
+    {
+        Queue::fake();
+
+        Queue::route(JobWithDefaultQueue::class, 'default-queue');
+        Queue::route(JobWithoutDefaultQueue::class, 'fallback-queue');
+        Queue::route(JobWithoutDefaultConnection::class, 'some-queue', 'some-connection');
+
+        /** @var \Illuminate\Console\Scheduling\Schedule $scheduler */
+        $scheduler = $this->app->make(Schedule::class);
+
+        $scheduler->job(JobWithDefaultQueue::class)->name('')->everyMinute();
+        $scheduler->job(JobWithoutDefaultQueue::class)->name('')->everyMinute();
+        $scheduler->job(JobWithoutDefaultConnection::class)->name('')->everyMinute();
+
+        $events = $scheduler->events();
+        foreach ($events as $event) {
+            $event->run($this->app);
+        }
+
+        // Own queue takes precedence over default
+        Queue::assertPushedOn('test-queue', JobWithDefaultQueue::class);
+        Queue::assertPushedOn('fallback-queue', JobWithoutDefaultQueue::class);
+        Queue::connection('some-queue')->assertPushedOn('some-queue', JobWithoutDefaultConnection::class);
     }
 }
 

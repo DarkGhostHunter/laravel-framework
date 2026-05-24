@@ -223,6 +223,8 @@ class Grammar extends BaseGrammar
      * Determine if the grammar supports straight joins.
      *
      * @return bool
+     *
+     * @throws \RuntimeException
      */
     protected function supportsStraightJoins()
     {
@@ -327,6 +329,8 @@ class Grammar extends BaseGrammar
      * @param  \Illuminate\Database\Query\Builder  $query
      * @param  array  $where
      * @return string
+     *
+     * @throws \RuntimeException
      */
     protected function whereLike(Builder $query, $where)
     {
@@ -442,9 +446,9 @@ class Grammar extends BaseGrammar
     {
         $between = $where['not'] ? 'not between' : 'between';
 
-        $min = $this->parameter(is_array($where['values']) ? reset($where['values']) : $where['values'][0]);
+        $min = $this->parameter(is_array($where['values']) ? array_first($where['values']) : $where['values'][0]);
 
-        $max = $this->parameter(is_array($where['values']) ? end($where['values']) : $where['values'][1]);
+        $max = $this->parameter(is_array($where['values']) ? array_last($where['values']) : $where['values'][1]);
 
         return $this->wrap($where['column']).' '.$between.' '.$min.' and '.$max;
     }
@@ -460,11 +464,29 @@ class Grammar extends BaseGrammar
     {
         $between = $where['not'] ? 'not between' : 'between';
 
-        $min = $this->wrap(is_array($where['values']) ? reset($where['values']) : $where['values'][0]);
+        $min = $this->wrap(is_array($where['values']) ? array_first($where['values']) : $where['values'][0]);
 
-        $max = $this->wrap(is_array($where['values']) ? end($where['values']) : $where['values'][1]);
+        $max = $this->wrap(is_array($where['values']) ? array_last($where['values']) : $where['values'][1]);
 
         return $this->wrap($where['column']).' '.$between.' '.$min.' and '.$max;
+    }
+
+    /**
+     * Compile a "value between" where clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereValueBetween(Builder $query, $where)
+    {
+        $between = $where['not'] ? 'not between' : 'between';
+
+        $min = $this->wrap(is_array($where['columns']) ? array_first($where['columns']) : $where['columns'][0]);
+
+        $max = $this->wrap(is_array($where['columns']) ? array_last($where['columns']) : $where['columns'][1]);
+
+        return $this->parameter($where['value']).' '.$between.' '.$min.' and '.$max;
     }
 
     /**
@@ -793,6 +815,8 @@ class Grammar extends BaseGrammar
      * @param  \Illuminate\Database\Query\Builder  $query
      * @param  array  $where
      * @return string
+     *
+     * @throws \RuntimeException
      */
     public function whereFullText(Builder $query, $where)
     {
@@ -981,7 +1005,11 @@ class Grammar extends BaseGrammar
      */
     protected function compileOrdersToArray(Builder $query, $orders)
     {
-        return array_map(function ($order) {
+        return array_map(function ($order) use ($query) {
+            if (isset($order['sql']) && $order['sql'] instanceof Expression) {
+                return $order['sql']->getValue($query->getGrammar());
+            }
+
             return $order['sql'] ?? $this->wrap($order['column']).' '.$order['direction'];
         }, $orders);
     }
@@ -1180,18 +1208,18 @@ class Grammar extends BaseGrammar
             return "insert into {$table} default values";
         }
 
-        if (! is_array(reset($values))) {
+        if (! is_array(array_first($values))) {
             $values = [$values];
         }
 
-        $columns = $this->columnize(array_keys(reset($values)));
+        $columns = $this->columnize(array_keys(array_first($values)));
 
         // We need to build a list of parameter place-holders of values that are bound
         // to the query. Each insert should have the exact same number of parameter
         // bindings so we will loop through the record and parameterize them all.
-        $parameters = (new Collection($values))->map(function ($record) {
-            return '('.$this->parameterize($record).')';
-        })->implode(', ');
+        $parameters = (new Collection($values))
+            ->map(fn ($record) => '('.$this->parameterize($record).')')
+            ->implode(', ');
 
         return "insert into $table ($columns) values $parameters";
     }
@@ -1208,6 +1236,22 @@ class Grammar extends BaseGrammar
     public function compileInsertOrIgnore(Builder $query, array $values)
     {
         throw new RuntimeException('This database engine does not support inserting while ignoring errors.');
+    }
+
+    /**
+     * Compile an insert or ignore statement with a returning clause into SQL.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $values
+     * @param  array  $uniqueBy
+     * @param  array  $returning
+     * @return string
+     *
+     * @throws \RuntimeException
+     */
+    public function compileInsertOrIgnoreReturning(Builder $query, array $values, array $uniqueBy, array $returning)
+    {
+        throw new RuntimeException('This database engine does not support insert or ignore with returning.');
     }
 
     /**
@@ -1288,9 +1332,9 @@ class Grammar extends BaseGrammar
      */
     protected function compileUpdateColumns(Builder $query, array $values)
     {
-        return (new Collection($values))->map(function ($value, $key) {
-            return $this->wrap($key).' = '.$this->parameter($value);
-        })->implode(', ');
+        return (new Collection($values))
+            ->map(fn ($value, $key) => $this->wrap($key).' = '.$this->parameter($value))
+            ->implode(', ');
     }
 
     /**

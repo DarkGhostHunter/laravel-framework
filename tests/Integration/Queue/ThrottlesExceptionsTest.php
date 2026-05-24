@@ -5,6 +5,7 @@ namespace Illuminate\Tests\Integration\Queue;
 use Exception;
 use Illuminate\Bus\Dispatcher;
 use Illuminate\Bus\Queueable;
+use Illuminate\Cache\RateLimiter;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Contracts\Queue\Job;
 use Illuminate\Queue\CallQueuedHandler;
@@ -43,6 +44,11 @@ class ThrottlesExceptionsTest extends TestCase
     public function testCircuitCanSkipJob()
     {
         $this->assertJobWasDeleted(CircuitBreakerSkipJob::class);
+    }
+
+    public function testCircuitCanFailJob()
+    {
+        $this->assertJobWasFailed(CircuitBreakerFailedJob::class);
     }
 
     protected function assertJobWasReleasedImmediately($class)
@@ -98,6 +104,27 @@ class ThrottlesExceptionsTest extends TestCase
         $job->shouldReceive('delete')->once();
         $job->shouldReceive('isDeleted')->andReturn(true);
         $job->shouldReceive('isReleased')->twice()->andReturn(false);
+        $job->shouldReceive('isDeletedOrReleased')->once()->andReturn(true);
+        $job->shouldReceive('uuid')->andReturn('simple-test-uuid');
+
+        $instance->call($job, [
+            'command' => serialize($command = new $class),
+        ]);
+
+        $this->assertTrue($class::$handled);
+    }
+
+    protected function assertJobWasFailed($class)
+    {
+        $class::$handled = false;
+        $instance = new CallQueuedHandler(new Dispatcher($this->app), $this->app);
+
+        $job = m::mock(Job::class);
+
+        $job->shouldReceive('hasFailed')->once()->andReturn(true);
+        $job->shouldReceive('fail')->once();
+        $job->shouldReceive('isDeleted')->andReturn(true);
+        $job->shouldReceive('isReleased')->once()->andReturn(false);
         $job->shouldReceive('isDeletedOrReleased')->once()->andReturn(true);
         $job->shouldReceive('uuid')->andReturn('simple-test-uuid');
 
@@ -319,6 +346,85 @@ class ThrottlesExceptionsTest extends TestCase
         $middleware->report(fn () => false);
         $middleware->handle($job, $next);
     }
+
+    public function testUsesJobClassNameForCacheKey()
+    {
+        $rateLimiter = $this->mock(RateLimiter::class);
+
+        $job = new class
+        {
+            public $released = false;
+
+            public function release()
+            {
+                $this->released = true;
+
+                return $this;
+            }
+        };
+
+        $expectedKey = 'laravel_throttles_exceptions:'.hash('xxh128', get_class($job));
+
+        $rateLimiter->shouldReceive('tooManyAttempts')
+            ->once()
+            ->with($expectedKey, 10)
+            ->andReturn(false);
+
+        $rateLimiter->shouldReceive('hit')
+            ->once()
+            ->with($expectedKey, 600);
+
+        $next = function ($job) {
+            throw new RuntimeException('Whoops!');
+        };
+
+        $middleware = new ThrottlesExceptions();
+        $middleware->handle($job, $next);
+
+        $this->assertTrue($job->released);
+    }
+
+    public function testUsesDisplayNameForCacheKeyWhenAvailable()
+    {
+        $rateLimiter = $this->mock(RateLimiter::class);
+
+        $job = new class
+        {
+            public $released = false;
+
+            public function release()
+            {
+                $this->released = true;
+
+                return $this;
+            }
+
+            public function displayName(): string
+            {
+                return 'App\\Actions\\ThrottlesExceptionsTestAction';
+            }
+        };
+
+        $expectedKey = 'laravel_throttles_exceptions:'.hash('xxh128', 'App\\Actions\\ThrottlesExceptionsTestAction');
+
+        $rateLimiter->shouldReceive('tooManyAttempts')
+            ->once()
+            ->with($expectedKey, 10)
+            ->andReturn(false);
+
+        $rateLimiter->shouldReceive('hit')
+            ->once()
+            ->with($expectedKey, 600);
+
+        $next = function ($job) {
+            throw new RuntimeException('Whoops!');
+        };
+
+        $middleware = new ThrottlesExceptions();
+        $middleware->handle($job, $next);
+
+        $this->assertTrue($job->released);
+    }
 }
 
 class CircuitBreakerTestJob
@@ -356,6 +462,25 @@ class CircuitBreakerSkipJob
     public function middleware()
     {
         return [(new ThrottlesExceptions(2, 10 * 60))->deleteWhen(Exception::class)];
+    }
+}
+
+class CircuitBreakerFailedJob
+{
+    use InteractsWithQueue, Queueable;
+
+    public static $handled = false;
+
+    public function handle()
+    {
+        static::$handled = true;
+
+        throw new Exception;
+    }
+
+    public function middleware()
+    {
+        return [(new ThrottlesExceptions(2, 10 * 60))->failWhen(Exception::class)];
     }
 }
 

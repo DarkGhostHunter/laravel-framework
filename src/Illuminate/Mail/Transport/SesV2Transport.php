@@ -44,6 +44,8 @@ class SesV2Transport extends AbstractTransport implements Stringable
 
     /**
      * {@inheritDoc}
+     *
+     * @throws \Symfony\Component\Mailer\Exception\TransportException
      */
     protected function doSend(SentMessage $message): void
     {
@@ -100,7 +102,7 @@ class SesV2Transport extends AbstractTransport implements Stringable
     /**
      * Extract the SES list managenent options, if applicable.
      *
-     * @param  \Illuminate\Mail\SentMessage  $message
+     * @param  \Symfony\Component\Mailer\SentMessage  $message
      * @return array|null
      */
     protected function listManagementOptions(SentMessage $message)

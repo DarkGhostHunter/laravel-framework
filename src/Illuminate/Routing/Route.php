@@ -7,6 +7,7 @@ use Closure;
 use Illuminate\Container\Container;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Attributes\Controllers\Middleware as MiddlewareAttribute;
 use Illuminate\Routing\Contracts\CallableDispatcher;
 use Illuminate\Routing\Contracts\ControllerDispatcher as ControllerDispatcherContract;
 use Illuminate\Routing\Controllers\HasMiddleware;
@@ -23,6 +24,9 @@ use Illuminate\Support\Traits\Macroable;
 use InvalidArgumentException;
 use Laravel\SerializableClosure\SerializableClosure;
 use LogicException;
+use ReflectionAttribute;
+use ReflectionClass;
+use ReflectionException;
 use Symfony\Component\Routing\Route as SymfonyRoute;
 
 use function Illuminate\Support\enum_value;
@@ -1007,6 +1011,12 @@ class Route
             $this->domain($this->action['domain']);
         }
 
+        if (isset($this->action['can'])) {
+            foreach ($this->action['can'] as $can) {
+                $this->can($can[0], $can[1] ?? []);
+            }
+        }
+
         return $this;
     }
 
@@ -1061,7 +1071,7 @@ class Route
      * Get or set the middlewares attached to the route.
      *
      * @param  array|string|null  $middleware
-     * @return $this|array
+     * @return ($middleware is null ? array : $this)
      */
     public function middleware($middleware = null)
     {
@@ -1128,7 +1138,9 @@ class Route
             );
         }
 
-        return [];
+        return $this->attributeProvidedControllerMiddleware(
+            $controllerClass, $controllerMethod
+        );
     }
 
     /**
@@ -1154,6 +1166,36 @@ class Route
             ->map
             ->middleware
             ->flatten()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Get the attribute provided controller middleware for the given class and method.
+     *
+     * @return array
+     */
+    protected function attributeProvidedControllerMiddleware(string $class, string $method)
+    {
+        try {
+            $reflectionClass = new ReflectionClass($class);
+
+            $reflectionMethod = $reflectionClass->getMethod($method);
+        } catch (ReflectionException) {
+            return [];
+        }
+
+        return (new Collection(array_merge(
+            $reflectionClass->getAttributes(MiddlewareAttribute::class, ReflectionAttribute::IS_INSTANCEOF),
+            $reflectionMethod->getAttributes(MiddlewareAttribute::class, ReflectionAttribute::IS_INSTANCEOF),
+        )))->map(function (ReflectionAttribute $attribute) use ($method) {
+            $instance = $attribute->newInstance();
+
+            return static::methodExcludedByOptions(
+                $method, ['only' => $instance->only, 'except' => $instance->except],
+            ) ? null : $instance->value;
+        })
+            ->filter()
             ->values()
             ->all();
     }
@@ -1393,6 +1435,7 @@ class Route
 
         $this->compileRoute();
 
+        /** @phpstan-ignore unset.possiblyHookedProperty,unset.possiblyHookedProperty */
         unset($this->router, $this->container);
     }
 

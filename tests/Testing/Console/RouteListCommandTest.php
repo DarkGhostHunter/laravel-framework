@@ -8,7 +8,6 @@ use Illuminate\Foundation\Console\RouteListCommand;
 use Illuminate\Foundation\Testing\Concerns\InteractsWithDeprecationHandling;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Routing\Controller;
-use Illuminate\Support\Facades\Facade;
 use Orchestra\Testbench\Attributes\WithConfig;
 use Orchestra\Testbench\TestCase;
 
@@ -125,6 +124,10 @@ class RouteListCommandTest extends TestCase
     {
         $this->withoutDeprecationHandling();
 
+        RouteListCommand::resolveTerminalWidthUsing(function () {
+            return 82;
+        });
+
         $this->router->get('/', function () {
             //
         });
@@ -137,7 +140,7 @@ class RouteListCommandTest extends TestCase
                 '  GET|HEAD       foo/{user} Illuminate\Tests\Testing\Console\FooController@show'
             )->expectsOutput('')
             ->expectsOutput(
-                '                                                  Showing [1] routes'
+                '                                                              Showing [1] routes'
             )
             ->expectsOutput('');
     }
@@ -159,13 +162,32 @@ class RouteListCommandTest extends TestCase
             ->expectsOutput('');
     }
 
-    protected function tearDown(): void
+    public function testDisplayRoutesWithBindingFields()
     {
-        parent::tearDown();
+        $this->router->get('users/{user:name}', [FooController::class, 'show']);
+        $this->router->get('users/{user:name}/posts/{post:slug}', function () {
+            //
+        });
 
-        Facade::setFacadeApplication(null);
+        $this->artisan(RouteListCommand::class, ['-v' => true])
+            ->assertSuccessful()
+            ->expectsOutput('')
+            ->expectsOutput('  GET|HEAD       users/{user:name} Illuminate\Tests\Testing\Console\FooController@show')
+            ->expectsOutput('  GET|HEAD       users/{user:name}/posts/{post:slug} ............... ')
+            ->expectsOutput('')
+            ->expectsOutput('                                                  Showing [2] routes')
+            ->expectsOutput('');
+    }
 
-        RouteListCommand::resolveTerminalWidthUsing(null);
+    public function testDisplayRoutesWithBindingFieldsAsJson()
+    {
+        $this->router->get('users/{user:name}/posts/{post:slug}', function () {
+            //
+        });
+
+        $this->artisan(RouteListCommand::class, ['--json' => true])
+            ->assertSuccessful()
+            ->expectsOutputToContain('users\/{user:name}\/posts\/{post:slug}');
     }
 }
 

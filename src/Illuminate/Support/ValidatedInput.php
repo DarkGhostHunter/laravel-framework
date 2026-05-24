@@ -4,13 +4,13 @@ namespace Illuminate\Support;
 
 use ArrayIterator;
 use Illuminate\Contracts\Support\ValidatedData;
+use Illuminate\Support\Traits\Dumpable;
 use Illuminate\Support\Traits\InteractsWithData;
-use Symfony\Component\VarDumper\VarDumper;
 use Traversable;
 
 class ValidatedInput implements ValidatedData
 {
-    use InteractsWithData;
+    use Dumpable, InteractsWithData;
 
     /**
      * The underlying input.
@@ -43,7 +43,7 @@ class ValidatedInput implements ValidatedData
     /**
      * Get the raw, underlying input array.
      *
-     * @param  array|mixed|null  $keys
+     * @param  mixed  $keys
      * @return array
      */
     public function all($keys = null)
@@ -98,29 +98,14 @@ class ValidatedInput implements ValidatedData
     }
 
     /**
-     * Dump the validated inputs items and end the script.
-     *
-     * @param  mixed  ...$keys
-     * @return never
-     */
-    public function dd(...$keys)
-    {
-        $this->dump(...$keys);
-
-        exit(1);
-    }
-
-    /**
      * Dump the items.
      *
-     * @param  mixed  $keys
+     * @param  mixed  ...$keys
      * @return $this
      */
-    public function dump($keys = [])
+    public function dump(...$keys)
     {
-        $keys = is_array($keys) ? $keys : func_get_args();
-
-        VarDumper::dump(count($keys) > 0 ? $this->only($keys) : $this->all());
+        dump(count($keys) > 0 ? $this->only($keys) : $this->all());
 
         return $this;
     }
@@ -161,6 +146,7 @@ class ValidatedInput implements ValidatedData
     /**
      * Determine if an input item is set.
      *
+     * @param  string  $name
      * @return bool
      */
     public function __isset($name)
@@ -182,50 +168,50 @@ class ValidatedInput implements ValidatedData
     /**
      * Determine if an item exists at an offset.
      *
-     * @param  mixed  $key
+     * @param  mixed  $offset
      * @return bool
      */
-    public function offsetExists($key): bool
+    public function offsetExists($offset): bool
     {
-        return $this->exists($key);
+        return $this->exists($offset);
     }
 
     /**
      * Get an item at a given offset.
      *
-     * @param  mixed  $key
+     * @param  mixed  $offset
      * @return mixed
      */
-    public function offsetGet($key): mixed
+    public function offsetGet($offset): mixed
     {
-        return $this->input($key);
+        return $this->input($offset);
     }
 
     /**
      * Set the item at a given offset.
      *
-     * @param  mixed  $key
+     * @param  mixed  $offset
      * @param  mixed  $value
      * @return void
      */
-    public function offsetSet($key, $value): void
+    public function offsetSet($offset, $value): void
     {
-        if (is_null($key)) {
+        if (is_null($offset)) {
             $this->input[] = $value;
         } else {
-            $this->input[$key] = $value;
+            $this->input[$offset] = $value;
         }
     }
 
     /**
      * Unset the item at a given offset.
      *
-     * @param  string  $key
+     * @param  string  $offset
      * @return void
      */
-    public function offsetUnset($key): void
+    public function offsetUnset($offset): void
     {
-        unset($this->input[$key]);
+        unset($this->input[$offset]);
     }
 
     /**

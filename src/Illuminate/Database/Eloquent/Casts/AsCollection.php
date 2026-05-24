@@ -15,6 +15,8 @@ class AsCollection implements Castable
      *
      * @param  array  $arguments
      * @return \Illuminate\Contracts\Database\Eloquent\CastsAttributes<\Illuminate\Support\Collection<array-key, mixed>, iterable>
+     *
+     * @throws \InvalidArgumentException
      */
     public static function castUsing(array $arguments)
     {
@@ -80,7 +82,7 @@ class AsCollection implements Castable
      * Specify the collection type for the cast.
      *
      * @param  class-string  $class
-     * @param  array{class-string, string}|class-string  $map
+     * @param  array{class-string, string}|class-string|null  $map
      * @return string
      */
     public static function using($class, $map = null)

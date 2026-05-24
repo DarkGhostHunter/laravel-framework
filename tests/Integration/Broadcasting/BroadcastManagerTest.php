@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Queue;
 use InvalidArgumentException;
 use Orchestra\Testbench\TestCase;
+use RuntimeException;
 
 class BroadcastManagerTest extends TestCase
 {
@@ -40,6 +41,18 @@ class BroadcastManagerTest extends TestCase
 
         Bus::assertNotDispatched(BroadcastEvent::class);
         Queue::assertPushed(BroadcastEvent::class);
+    }
+
+    public function testEventsCanBeBroadcastUsingQueueRoutes()
+    {
+        Bus::fake();
+        Queue::fake();
+
+        Queue::route(TestEvent::class, 'broadcast-queue', 'broadcast-connection');
+
+        Broadcast::queue(new TestEvent);
+        Bus::assertNotDispatched(BroadcastEvent::class);
+        Queue::connection('broadcast-connection')->assertPushedOn('broadcast-queue', BroadcastEvent::class);
     }
 
     public function testEventsCanBeRescued()
@@ -74,7 +87,35 @@ class BroadcastManagerTest extends TestCase
         Bus::assertNotDispatched(UniqueBroadcastEvent::class);
         Queue::assertPushed(UniqueBroadcastEvent::class);
 
-        $lockKey = 'laravel_unique_job:'.UniqueBroadcastEvent::class.':'.TestEventUnique::class;
+        $lockKey = 'laravel_unique_job:'.TestEventUnique::class.':';
+        $this->assertFalse($this->app->get(Cache::class)->lock($lockKey, 10)->get());
+    }
+
+    public function testUniqueEventsCanBeBroadcastWithUniqueIdFromProperty()
+    {
+        Bus::fake();
+        Queue::fake();
+
+        Broadcast::queue(new TestEventUniqueWithIdProperty);
+
+        Bus::assertNotDispatched(UniqueBroadcastEvent::class);
+        Queue::assertPushed(UniqueBroadcastEvent::class);
+
+        $lockKey = 'laravel_unique_job:'.TestEventUniqueWithIdProperty::class.':unique-id-property';
+        $this->assertFalse($this->app->get(Cache::class)->lock($lockKey, 10)->get());
+    }
+
+    public function testUniqueEventsCanBeBroadcastWithUniqueIdFromMethod()
+    {
+        Bus::fake();
+        Queue::fake();
+
+        Broadcast::queue(new TestEventUniqueWithIdMethod);
+
+        Bus::assertNotDispatched(UniqueBroadcastEvent::class);
+        Queue::assertPushed(UniqueBroadcastEvent::class);
+
+        $lockKey = 'laravel_unique_job:'.TestEventUniqueWithIdMethod::class.':unique-id-method';
         $this->assertFalse($this->app->get(Cache::class)->lock($lockKey, 10)->get());
     }
 
@@ -98,6 +139,50 @@ class BroadcastManagerTest extends TestCase
         $broadcastManager = new BroadcastManager($app);
 
         $broadcastManager->connection('alien_connection');
+    }
+
+    public function testCustomDriverClosureBoundObjectIsBroadcastManager()
+    {
+        $manager = new BroadcastManager($this->getApp([
+            'broadcasting' => [
+                'connections' => [
+                    __CLASS__ => [
+                        'driver' => __CLASS__,
+                    ],
+                ],
+            ],
+        ]));
+        $manager->extend(__CLASS__, fn () => $this);
+        $this->assertSame($manager, $manager->connection(__CLASS__));
+    }
+
+    public function testThrowExceptionWhenDriverCreationFails()
+    {
+        $userConfig = [
+            'broadcasting' => [
+                'connections' => [
+                    'log_connection_1' => [
+                        'driver' => 'log',
+                    ],
+                ],
+            ],
+        ];
+
+        $app = $this->getApp($userConfig);
+        $app->singleton(\Psr\Log\LoggerInterface::class, function () {
+            throw new \RuntimeException('Logger service not available');
+        });
+
+        $broadcastManager = new BroadcastManager($app);
+
+        try {
+            $broadcastManager->connection('log_connection_1');
+            $this->fail('Expected BroadcastException was not thrown');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('Failed to create broadcaster for connection "log_connection_1"', $e->getMessage());
+            $this->assertStringContainsString('Logger service not available', $e->getMessage());
+            $this->assertInstanceOf(\RuntimeException::class, $e->getPrevious());
+        }
     }
 
     protected function getApp(array $userConfig)
@@ -146,6 +231,16 @@ class TestEventUnique implements ShouldBroadcast, ShouldBeUnique
     {
         //
     }
+}
+
+class TestEventUniqueWithIdProperty extends TestEventUnique
+{
+    public string $uniqueId = 'unique-id-property';
+}
+
+class TestEventUniqueWithIdMethod extends TestEventUnique
+{
+    public string $uniqueId = 'unique-id-method';
 }
 
 class TestEventRescue implements ShouldBroadcast, ShouldRescue

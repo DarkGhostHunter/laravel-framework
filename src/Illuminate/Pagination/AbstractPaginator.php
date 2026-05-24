@@ -353,8 +353,12 @@ abstract class AbstractPaginator implements CanBeEscapedWhenCastToString, Htmlab
     /**
      * Transform each item in the slice of items using a callback.
      *
-     * @param  callable  $callback
+     * @template TMapValue
+     *
+     * @param  callable(TValue, TKey): TMapValue  $callback
      * @return $this
+     *
+     * @phpstan-this-out static<TKey, TMapValue>
      */
     public function through(callable $callback)
     {
@@ -633,8 +637,8 @@ abstract class AbstractPaginator implements CanBeEscapedWhenCastToString, Htmlab
      */
     public static function useBootstrapThree()
     {
-        static::defaultView('pagination::default');
-        static::defaultSimpleView('pagination::simple-default');
+        static::defaultView('pagination::bootstrap-3');
+        static::defaultSimpleView('pagination::simple-bootstrap-3');
     }
 
     /**
@@ -735,46 +739,46 @@ abstract class AbstractPaginator implements CanBeEscapedWhenCastToString, Htmlab
     /**
      * Determine if the given item exists.
      *
-     * @param  TKey  $key
+     * @param  TKey  $offset
      * @return bool
      */
-    public function offsetExists($key): bool
+    public function offsetExists($offset): bool
     {
-        return $this->items->has($key);
+        return $this->items->has($offset);
     }
 
     /**
      * Get the item at the given offset.
      *
-     * @param  TKey  $key
+     * @param  TKey  $offset
      * @return TValue|null
      */
-    public function offsetGet($key): mixed
+    public function offsetGet($offset): mixed
     {
-        return $this->items->get($key);
+        return $this->items->get($offset);
     }
 
     /**
      * Set the item at the given offset.
      *
-     * @param  TKey|null  $key
+     * @param  TKey|null  $offset
      * @param  TValue  $value
      * @return void
      */
-    public function offsetSet($key, $value): void
+    public function offsetSet($offset, $value): void
     {
-        $this->items->put($key, $value);
+        $this->items->put($offset, $value);
     }
 
     /**
      * Unset the item at the given key.
      *
-     * @param  TKey  $key
+     * @param  TKey  $offset
      * @return void
      */
-    public function offsetUnset($key): void
+    public function offsetUnset($offset): void
     {
-        $this->items->forget($key);
+        $this->items->forget($offset);
     }
 
     /**

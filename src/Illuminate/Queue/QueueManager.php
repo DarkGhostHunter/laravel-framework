@@ -5,6 +5,7 @@ namespace Illuminate\Queue;
 use Closure;
 use Illuminate\Contracts\Queue\Factory as FactoryContract;
 use Illuminate\Contracts\Queue\Monitor as MonitorContract;
+use Illuminate\Support\Queue\Concerns\ResolvesQueueRoutes;
 use InvalidArgumentException;
 
 /**
@@ -12,6 +13,8 @@ use InvalidArgumentException;
  */
 class QueueManager implements FactoryContract, MonitorContract
 {
+    use ResolvesQueueRoutes;
+
     /**
      * The application instance.
      *
@@ -121,6 +124,19 @@ class QueueManager implements FactoryContract, MonitorContract
     }
 
     /**
+     * Set the queue route for the given class.
+     *
+     * @param  array|class-string  $class
+     * @param  string|null  $queue
+     * @param  string|null  $connection
+     * @return void
+     */
+    public function route(array|string $class, $queue = null, $connection = null)
+    {
+        $this->queueRoutes()->set($class, $queue, $connection);
+    }
+
+    /**
      * Determine if the driver is connected.
      *
      * @param  string|null  $name
@@ -169,9 +185,15 @@ class QueueManager implements FactoryContract, MonitorContract
             throw new InvalidArgumentException("The [{$name}] queue connection has not been configured.");
         }
 
-        return $this->getConnector($config['driver'])
+        $queue = $this->getConnector($config['driver'])
             ->connect($config)
             ->setConnectionName($name);
+
+        if (method_exists($queue, 'setConfig')) {
+            $queue->setConfig($config);
+        }
+
+        return $queue;
     }
 
     /**
@@ -189,6 +211,88 @@ class QueueManager implements FactoryContract, MonitorContract
         }
 
         return call_user_func($this->connectors[$driver]);
+    }
+
+    /**
+     * Pause a queue by its connection and name.
+     *
+     * @param  string  $connection
+     * @param  string  $queue
+     * @return void
+     */
+    public function pause($connection, $queue)
+    {
+        $this->app['cache']
+            ->store()
+            ->forever("illuminate:queue:paused:{$connection}:{$queue}", true);
+
+        $this->app['events']->dispatch(
+            new Events\QueuePaused($connection, $queue)
+        );
+    }
+
+    /**
+     * Pause a queue by its connection and name for a given amount of time.
+     *
+     * @param  string  $connection
+     * @param  string  $queue
+     * @param  \DateTimeInterface|\DateInterval|int  $ttl
+     * @return void
+     */
+    public function pauseFor($connection, $queue, $ttl)
+    {
+        $this->app['cache']
+            ->store()
+            ->put("illuminate:queue:paused:{$connection}:{$queue}", true, $ttl);
+
+        $this->app['events']->dispatch(
+            new Events\QueuePaused($connection, $queue, $ttl)
+        );
+    }
+
+    /**
+     * Resume a paused queue by its connection and name.
+     *
+     * @param  string  $connection
+     * @param  string  $queue
+     * @return void
+     */
+    public function resume($connection, $queue)
+    {
+        $this->app['cache']
+            ->store()
+            ->forget("illuminate:queue:paused:{$connection}:{$queue}");
+
+        $this->app['events']->dispatch(
+            new Events\QueueResumed($connection, $queue)
+        );
+    }
+
+    /**
+     * Determine if a queue is paused.
+     *
+     * @param  string  $connection
+     * @param  string  $queue
+     * @return bool
+     */
+    public function isPaused($connection, $queue)
+    {
+        return (bool) $this->app['cache']
+            ->store()
+            ->get("illuminate:queue:paused:{$connection}:{$queue}", false);
+    }
+
+    /**
+     * Indicate that queue workers should not poll for restart or pause signals.
+     *
+     * This prevents the workers from hitting the application cache to determine if they need to pause or restart.
+     *
+     * @return void
+     */
+    public function withoutInterruptionPolling()
+    {
+        Worker::$restartable = false;
+        Worker::$pausable = false;
     }
 
     /**

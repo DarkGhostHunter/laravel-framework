@@ -82,6 +82,7 @@ class ServeCommand extends Command
         'HERD_PHP_82_INI_SCAN_DIR',
         'HERD_PHP_83_INI_SCAN_DIR',
         'HERD_PHP_84_INI_SCAN_DIR',
+        'HERD_PHP_85_INI_SCAN_DIR',
         'IGNITION_LOCAL_SITES_PATH',
         'LARAVEL_SAIL',
         'PATH',
@@ -94,14 +95,22 @@ class ServeCommand extends Command
 
     /** {@inheritdoc} */
     #[\Override]
-    protected function initialize(InputInterface $input, OutputInterface $output)
+    protected function initialize(InputInterface $input, OutputInterface $output): void
     {
         $this->phpServerWorkers = transform((int) env('PHP_CLI_SERVER_WORKERS', 1), function (int $workers) {
             if ($workers < 2) {
                 return false;
             }
 
-            return $workers > 1 && ! $this->option('no-reload') ? false : $workers;
+            if ($workers > 1 &&
+                ! $this->option('no-reload') &&
+                ! (int) env('LARAVEL_SAIL', 0)) {
+                $this->components->warn('Unable to respect the `PHP_CLI_SERVER_WORKERS` environment variable without the `--no-reload` flag. Only creating a single server.');
+
+                return false;
+            }
+
+            return $workers;
         });
 
         parent::initialize($input, $output);
@@ -399,6 +408,8 @@ class ServeCommand extends Command
      *
      * @param  string  $line
      * @return int
+     *
+     * @throws \InvalidArgumentException
      */
     public static function getRequestPortFromLine($line)
     {

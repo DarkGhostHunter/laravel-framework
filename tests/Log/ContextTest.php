@@ -25,8 +25,9 @@ class ContextTest extends TestCase
     #[\Override]
     protected function tearDown(): void
     {
-        parent::tearDown();
         MyAddContextProcessor::$wasConstructed = false;
+
+        parent::tearDown();
     }
 
     public function test_it_can_set_values()
@@ -661,6 +662,42 @@ class ContextTest extends TestCase
         Context::increment('foo', 2);
         Context::decrement('foo', 2);
         $this->assertSame(0, Context::get('foo'));
+    }
+
+    public function test_it_remembers_a_value()
+    {
+        $this->assertSame(1, Context::remember('int', 1));
+
+        $closureRunCount = 0;
+        $closure = function () use (&$closureRunCount) {
+            $closureRunCount++;
+
+            return 'bar';
+        };
+
+        $this->assertSame('bar', Context::remember('foo', $closure));
+        $this->assertSame('bar', Context::get('foo'));
+
+        Context::remember('foo', $closure);
+        $this->assertSame(1, $closureRunCount);
+    }
+
+    public function test_it_remembers_a_hidden_value()
+    {
+        $this->assertSame(1, Context::rememberHidden('int', 1));
+
+        $closureRunCount = 0;
+        $closure = function () use (&$closureRunCount) {
+            $closureRunCount++;
+
+            return 'bar';
+        };
+
+        $this->assertSame('bar', Context::rememberHidden('foo', $closure));
+        $this->assertSame('bar', Context::getHidden('foo'));
+
+        Context::rememberHidden('foo', $closure);
+        $this->assertSame(1, $closureRunCount);
     }
 }
 

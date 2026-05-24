@@ -142,7 +142,7 @@ class RouteListCommand extends Command
         return $this->filterRoute([
             'domain' => $route->domain(),
             'method' => implode('|', $route->methods()),
-            'uri' => $route->uri(),
+            'uri' => $this->resolveUri($route),
             'name' => $route->getName(),
             'action' => ltrim($route->getActionName(), '\\'),
             'middleware' => $this->getMiddleware($route),
@@ -198,6 +198,23 @@ class RouteListCommand extends Command
         $this->output->writeln(
             $this->option('json') ? $this->asJson($routes) : $this->forCli($routes)
         );
+    }
+
+    /**
+     * Get the URI for the given route, including any binding fields.
+     *
+     * @param  \Illuminate\Routing\Route  $route
+     * @return string
+     */
+    protected function resolveUri(Route $route)
+    {
+        $uri = $route->uri();
+
+        foreach ($route->bindingFields() as $parameter => $field) {
+            $uri = str_replace("{{$parameter}}", "{{$parameter}:{$field}}", $uri);
+        }
+
+        return $uri;
     }
 
     /**
@@ -268,6 +285,7 @@ class RouteListCommand extends Command
             ($this->option('path') && ! Str::contains($route['uri'], $this->option('path'))) ||
             ($this->option('method') && ! Str::contains($route['method'], strtoupper($this->option('method')))) ||
             ($this->option('domain') && ! Str::contains((string) $route['domain'], $this->option('domain'))) ||
+            ($this->option('middleware') && ! Str::contains($route['middleware'], $this->option('middleware'))) ||
             ($this->option('except-vendor') && $route['vendor']) ||
             ($this->option('only-vendor') && ! $route['vendor'])) {
             return;
@@ -416,7 +434,7 @@ class RouteListCommand extends Command
      * Get the formatted action for display on the CLI.
      *
      * @param  array  $route
-     * @return string
+     * @return string|null
      */
     protected function formatActionForCli($route)
     {
@@ -500,6 +518,7 @@ class RouteListCommand extends Command
             ['action', null, InputOption::VALUE_OPTIONAL, 'Filter the routes by action'],
             ['name', null, InputOption::VALUE_OPTIONAL, 'Filter the routes by name'],
             ['domain', null, InputOption::VALUE_OPTIONAL, 'Filter the routes by domain'],
+            ['middleware', null, InputOption::VALUE_OPTIONAL, 'Filter the routes by middleware'],
             ['path', null, InputOption::VALUE_OPTIONAL, 'Only show routes matching the given path pattern'],
             ['except-path', null, InputOption::VALUE_OPTIONAL, 'Do not display the routes matching the given path pattern'],
             ['reverse', 'r', InputOption::VALUE_NONE, 'Reverse the ordering of the routes'],

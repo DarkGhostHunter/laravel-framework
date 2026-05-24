@@ -2,9 +2,12 @@
 
 namespace Illuminate\Console;
 
+use Illuminate\Console\Attributes\Description;
+use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\View\Components\Factory;
 use Illuminate\Contracts\Console\Isolatable;
 use Illuminate\Support\Traits\Macroable;
+use ReflectionClass;
 use Symfony\Component\Console\Command\Command as SymfonyCommand;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -45,16 +48,16 @@ class Command extends SymfonyCommand
     /**
      * The console command description.
      *
-     * @var string|null
+     * @var string
      */
-    protected $description;
+    protected $description = '';
 
     /**
      * The console command help text.
      *
      * @var string
      */
-    protected $help;
+    protected $help = '';
 
     /**
      * Indicates whether the command should be shown in the Artisan command list.
@@ -73,14 +76,14 @@ class Command extends SymfonyCommand
     /**
      * The default exit code for isolated commands.
      *
-     * @var int
+     * @var self::SUCCESS|self::FAILURE|self::INVALID
      */
     protected $isolatedExitCode = self::SUCCESS;
 
     /**
      * The console command name aliases.
      *
-     * @var array
+     * @var string[]
      */
     protected $aliases;
 
@@ -89,6 +92,8 @@ class Command extends SymfonyCommand
      */
     public function __construct()
     {
+        $this->configureFromAttributes();
+
         // We will go ahead and set the name, description, and parameters on console
         // commands just to make things a little easier on the developer. This is
         // so they don't have to all be manually specified in the constructors.
@@ -101,11 +106,13 @@ class Command extends SymfonyCommand
         // Once we have constructed the command, we'll set the description and other
         // related properties of the command. If a signature wasn't used to build
         // the command we'll set the arguments and the options on this command.
-        if (isset($this->description)) {
-            $this->setDescription((string) $this->description);
+        if (! empty($this->description)) {
+            $this->setDescription($this->description);
         }
 
-        $this->setHelp((string) $this->help);
+        if (! empty($this->help)) {
+            $this->setHelp($this->help);
+        }
 
         $this->setHidden($this->isHidden());
 
@@ -119,6 +126,34 @@ class Command extends SymfonyCommand
 
         if ($this instanceof Isolatable) {
             $this->configureIsolation();
+        }
+    }
+
+    /**
+     * Configure the command from class attributes.
+     *
+     * @return void
+     */
+    protected function configureFromAttributes()
+    {
+        $reflection = new ReflectionClass($this);
+
+        $signature = $reflection->getAttributes(Signature::class);
+
+        if (count($signature) > 0) {
+            $signatureInstance = $signature[0]->newInstance();
+
+            $this->signature = $signatureInstance->signature;
+
+            if ($signatureInstance->aliases !== null) {
+                $this->aliases = $signatureInstance->aliases;
+            }
+        }
+
+        $description = $reflection->getAttributes(Description::class);
+
+        if (count($description) > 0) {
+            $this->description = $description[0]->newInstance()->description;
         }
     }
 
